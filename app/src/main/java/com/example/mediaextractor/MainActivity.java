@@ -29,17 +29,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             "android.permission.READ_EXTERNAL_STORAGE",
             "android.permission.WRITE_EXTERNAL_STORAGE" };
     private static final int CAPACITY = 500 * 1024;
-    private static final String DCIM_PATH =
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).getPath();
-            //Environment.getExternalStorageDirectory().getPath();
-    private static final String MUSIC_PATH =
-                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC).getPath();
-    private static final String INPUT_PATH = "/input.mp4";
-    private static final String OUTPUT_VIDEO_PATH = "/output_video.mp4";
-    private static final String OUTPUT_AUDIO_PATH = "/output_audio.mp3";
-    private static final String OUTPUT_COMPOSITE_PATH = "/output_composite.mp4";
+    private static final String DCIM_PATH = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM).getPath();
+    private static final String MUSIC_PATH = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC).getPath();
+    private static final String INPUT_PATH = DCIM_PATH + "/input.mp4";
+    private static final String OUTPUT_VIDEO_PATH = DCIM_PATH + "/output_video.mp4";
+    private static final String OUTPUT_AUDIO_PATH = MUSIC_PATH + "/output_audio.mp3";
+    private static final String OUTPUT_COMPOSITE_PATH = DCIM_PATH + "/output_composite.mp4";
+    private static final String SUFFIX_AUDIO = ".mp3";
     private static final String PREFIX_VIDEO = "video/";
     private static final String PREFIX_AUDIO = "audio/";
+    private static final int INVALID_INDEX = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -78,278 +77,149 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     /**
      * 分离视频
      */
-    @SuppressLint("WrongConstant")
     private void extractorVideo() {
-        //创建MediaExtractor实例
-        MediaExtractor mediaExtractor = new MediaExtractor();
-        MediaMuxer mediaMuxer = null;
-        // 轨道索引
-        int videoIndex = -1;
-        try {
-            //设置数据源
-            mediaExtractor.setDataSource(DCIM_PATH + INPUT_PATH);
-            //数据源的轨道数
-            int count = mediaExtractor.getTrackCount();
-            for (int i = 0; i < count; i++) {
-                //视频轨道格式信息
-                MediaFormat format = mediaExtractor.getTrackFormat(i);
-                if (format.getString(MediaFormat.KEY_MIME).startsWith(PREFIX_VIDEO)) {
-                    //该轨道是视频轨道
-                    videoIndex = i;
-                }
-            }
-
-            //切换到想要的轨道
-            mediaExtractor.selectTrack(videoIndex);
-
-            //创建MediaMuxer实例，通过new MediaMuxer(String path, int format)指定视频文件输出路径和文件格式
-            mediaMuxer = new MediaMuxer(DCIM_PATH + OUTPUT_VIDEO_PATH,
-                    MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-
-            //视频轨道格式信息
-            MediaFormat format = mediaExtractor.getTrackFormat(videoIndex);
-
-            //添加媒体通道
-            int trackIndex = mediaMuxer.addTrack(format);
-
-            ByteBuffer byteBuffer = ByteBuffer.allocate(CAPACITY);
-            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-
-            //添加完所有track后调用start方法，开始音视频合成
-            mediaMuxer.start();
-
-            //获取帧之间的间隔时间
-            long videoSampleTime;
-            //将样本数据存储到字节缓存区
-            mediaExtractor.readSampleData(byteBuffer, 0);
-            //skip first I frame
-            if (mediaExtractor.getSampleFlags() == MediaExtractor.SAMPLE_FLAG_SYNC) {
-                //读取下一帧数据
-                mediaExtractor.advance();
-            }
-            mediaExtractor.readSampleData(byteBuffer, 0);
-            long first = mediaExtractor.getSampleTime();
-
-            mediaExtractor.advance();
-            mediaExtractor.readSampleData(byteBuffer, 0);
-            long second = mediaExtractor.getSampleTime();
-
-            videoSampleTime = Math.abs(second - first);
-            Log.d(TAG, "videoSampleTime is " + videoSampleTime);
-
-            mediaExtractor.unselectTrack(videoIndex);
-            mediaExtractor.selectTrack(videoIndex);
-
-            while (true) {
-                //将样本数据存储到字节缓存区
-                int readSampleSize = mediaExtractor.readSampleData(byteBuffer, 0);
-                if (readSampleSize < 0) {
-                    break;
-                }
-                //读取下一帧数据
-                mediaExtractor.advance();
-
-                bufferInfo.size = readSampleSize;
-                bufferInfo.offset = 0;
-                bufferInfo.flags = mediaExtractor.getSampleFlags();
-                bufferInfo.presentationTimeUs += videoSampleTime;
-
-                //调用MediaMuxer.writeSampleData()向mp4文件中写入数据
-                mediaMuxer.writeSampleData(trackIndex, byteBuffer, bufferInfo);
-            }
-
-            mediaMuxer.stop();
-            mediaExtractor.release();
-            mediaMuxer.release();
-            Toast.makeText(this, getString(R.string.extractor_video_finish), Toast.LENGTH_LONG).show();
-            Log.i(TAG, getString(R.string.extractor_video_finish));
-        } catch (IOException e) {
-            e.printStackTrace();
-            Toast.makeText(this, getString(R.string.extractor_video_fail), Toast.LENGTH_LONG).show();
-            Log.e(TAG, getString(R.string.extractor_video_fail) + e.toString());
-        }
+        showResult(extractor(OUTPUT_VIDEO_PATH), R.string.extractor_video_finish, R.string.extractor_video_finish);
     }
 
-    @SuppressLint("WrongConstant")
+    /**
+     * 分离音频
+     */
     private void extractorAudio() {
-        MediaExtractor mediaExtractor = new MediaExtractor();
-        MediaMuxer mediaMuxer = null;
-        int audioIndex = -1;
-        try {
-            mediaExtractor.setDataSource(DCIM_PATH + INPUT_PATH);
-            int count = mediaExtractor.getTrackCount();
-            for (int i = 0; i < count; i++) {
-                MediaFormat format = mediaExtractor.getTrackFormat(i);
-                if (format.getString(MediaFormat.KEY_MIME).startsWith(PREFIX_AUDIO)) {
-                    audioIndex = i;
-                }
-            }
-            mediaExtractor.selectTrack(audioIndex);
-
-            MediaFormat format = mediaExtractor.getTrackFormat(audioIndex);
-            mediaMuxer = new MediaMuxer(MUSIC_PATH + OUTPUT_AUDIO_PATH, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-            int writeAudioIndex = mediaMuxer.addTrack(format);
-            mediaMuxer.start();
-
-            ByteBuffer byteBuffer = ByteBuffer.allocate(CAPACITY);
-            MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
-
-            long stampTime = 0;
-            mediaExtractor.readSampleData(byteBuffer, 0);
-            if (mediaExtractor.getSampleFlags() == MediaExtractor.SAMPLE_FLAG_SYNC) {
-                mediaExtractor.advance();
-            }
-
-            mediaExtractor.readSampleData(byteBuffer, 0);
-            long secondTime = mediaExtractor.getSampleTime();
-            mediaExtractor.advance();
-
-            mediaExtractor.readSampleData(byteBuffer, 0);
-            long thirdTime = mediaExtractor.getSampleTime();
-
-            stampTime = Math.abs(thirdTime - secondTime);
-            Log.d(TAG, "stampTime: " + stampTime);
-
-            mediaExtractor.unselectTrack(audioIndex);
-            mediaExtractor.selectTrack(audioIndex);
-
-            while (true) {
-                int readSampleSize = mediaExtractor.readSampleData(byteBuffer, 0);
-                if (readSampleSize < 0) {
-                    break;
-                }
-                mediaExtractor.advance();
-
-                bufferInfo.size = readSampleSize;
-                bufferInfo.flags = mediaExtractor.getSampleFlags();
-                bufferInfo.offset = 0;
-                bufferInfo.presentationTimeUs += stampTime;
-
-                mediaMuxer.writeSampleData(writeAudioIndex, byteBuffer, bufferInfo);
-            }
-
-            mediaMuxer.stop();
-            mediaMuxer.release();
-            mediaExtractor.release();
-            Toast.makeText(this, getString(R.string.extractor_audio_finish), Toast.LENGTH_LONG).show();
-            Log.i(TAG, getString(R.string.extractor_audio_finish));
-        } catch (IOException e) {
-            e.printStackTrace();
-            Toast.makeText(this, getString(R.string.extractor_audio_fail), Toast.LENGTH_LONG).show();
-            Log.e(TAG, getString(R.string.extractor_audio_fail) + e.toString());
-        }
-
+        showResult(extractor(OUTPUT_AUDIO_PATH), R.string.extractor_audio_finish, R.string.extractor_audio_finish);
     }
 
     /**
      * 合成音视频
      */
-    @SuppressLint("WrongConstant")
     private void muterVideoAudio() {
+        showResult(muter(OUTPUT_COMPOSITE_PATH, OUTPUT_VIDEO_PATH, OUTPUT_AUDIO_PATH)
+                ,R.string.muter_finish, R.string.muter_fail);
+    }
+
+    private static boolean extractor(String outPath) {
+        return muter(outPath, INPUT_PATH);
+    }
+
+    @SuppressLint("WrongConstant")
+    private static boolean muter(String outPath, String... paths) {
+        if (paths == null || paths.length <= 0) {
+            return false;
+        }
         try {
-            //找到output_video.mp4中视频轨道
-            MediaExtractor videoExtractor = new MediaExtractor();
-            videoExtractor.setDataSource(DCIM_PATH + OUTPUT_VIDEO_PATH);
-            MediaFormat videoformat = null;
-            int videoTrackIndex = -1;
-            int videoTrackCount = videoExtractor.getTrackCount();
-            for (int i = 0; i < videoTrackCount; i++) {
-                videoformat = videoExtractor.getTrackFormat(i);
-                if (videoformat.getString(MediaFormat.KEY_MIME).startsWith(PREFIX_VIDEO)) {
-                    videoTrackIndex = i;
-                    break;
-                }
-            }
-
-            //找到output_audio.mp3中音频轨道
-            MediaExtractor audioExtractor = new MediaExtractor();
-            audioExtractor.setDataSource(MUSIC_PATH + OUTPUT_AUDIO_PATH);
-            MediaFormat audioformat = null;
-            int audioTrackIndex = -1;
-            int audioTrackCount = audioExtractor.getTrackCount();
-            for (int i = 0; i < audioTrackCount; i++) {
-                audioformat = audioExtractor.getTrackFormat(i);
-                if (audioformat.getString(MediaFormat.KEY_MIME).startsWith(PREFIX_AUDIO)) {
-                    audioTrackIndex = i;
-                    break;
-                }
-            }
-
-            videoExtractor.selectTrack(videoTrackIndex);
-            audioExtractor.selectTrack(audioTrackIndex);
-
-            MediaCodec.BufferInfo videoInfo = new MediaCodec.BufferInfo();
-            MediaCodec.BufferInfo audioInfo = new MediaCodec.BufferInfo();
-
-            //通过new MediaMuxer(String path, int format)指定视频文件输出路径和文件格式
-            MediaMuxer mediaMuxer = new MediaMuxer(DCIM_PATH + OUTPUT_COMPOSITE_PATH,
+            //创建MediaMuxer实例，通过new MediaMuxer(String path, int format)指定视频文件输出路径和文件格式
+            MediaMuxer mediaMuxer = new MediaMuxer(outPath,
                     MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-            //MediaMuxer添加媒体通道(视频)
-            int writeVideoTrackIndex = mediaMuxer.addTrack(videoformat);
-            //MediaMuxer添加媒体通道(音频)
-            int writeAudioTrackIndex = mediaMuxer.addTrack(audioformat);
-            //开始音视频合成
+
+            int length = paths.length;
+            MediaExtractor[] extractors = new MediaExtractor[length];
+            int[] trackIndexs = new int[length];
+            int[] writeTrackIndexs = new int[length];
+
+            for (int i = 0; i < length; i++) {
+                //创建MediaExtractor实例
+                MediaExtractor extractor = new MediaExtractor();
+                extractors[i] = extractor;
+                //设置数据源
+                extractor.setDataSource(paths[i]);
+                Log.d(TAG, "in: " + paths[i]);
+                //轨道索引
+                int trackIndex = getTrackIndex(extractor, getMediaPrefix(outPath, paths[i]));
+                //Log.d(TAG, "getTrackIndex: " + trackIndex);
+                if  (trackIndex == INVALID_INDEX) {
+                    Log.w(TAG, "trackIndex invalid");
+                    return false;
+                }
+                trackIndexs[i] = trackIndex;
+                //切换到想要的轨道
+                extractor.selectTrack(trackIndex);
+                //视频轨道格式信息
+                MediaFormat format = extractor.getTrackFormat(trackIndex);
+                //添加媒体通道
+                writeTrackIndexs[i] = mediaMuxer.addTrack(format);
+            }
+
+            //添加完所有track后调用start方法，开始音视频合成
             mediaMuxer.start();
 
+            MediaExtractor extractor;
             ByteBuffer byteBuffer = ByteBuffer.allocate(CAPACITY);
-            long sampleTime = 0;
-            videoExtractor.readSampleData(byteBuffer, 0);
-            if (videoExtractor.getSampleFlags() == MediaExtractor.SAMPLE_FLAG_SYNC) {
-                videoExtractor.advance();
-            }
 
-            videoExtractor.readSampleData(byteBuffer, 0);
-            long secondTime = videoExtractor.getSampleTime();
-            videoExtractor.advance();
+            for (int i = 0; i < length; i++) {
+                extractor = extractors[i];
 
-            long thirdTime = videoExtractor.getSampleTime();
-            sampleTime = Math.abs(thirdTime - secondTime);
+                long sampleTime = getSmapleTime(extractor, byteBuffer);
+                extractor.unselectTrack(trackIndexs[i]);
+                extractor.selectTrack(trackIndexs[i]);
 
-            videoExtractor.unselectTrack(videoTrackIndex);
-            videoExtractor.selectTrack(videoTrackIndex);
+                MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
+                while (true) {
+                    int readVideoSampleSize = extractor.readSampleData(byteBuffer, 0);
+                    if (readVideoSampleSize < 0) {
+                        break;
+                    }
 
-            while (true) {
-                int readVideoSampleSize = videoExtractor.readSampleData(byteBuffer, 0);
-                if (readVideoSampleSize < 0) {
-                    break;
+                    bufferInfo.size = readVideoSampleSize;
+                    bufferInfo.flags = extractor.getSampleFlags();
+                    bufferInfo.offset = 0;
+                    bufferInfo.presentationTimeUs += sampleTime;
+
+                    //写入数据
+                    mediaMuxer.writeSampleData(writeTrackIndexs[i], byteBuffer, bufferInfo);
+                    extractor.advance();
                 }
-
-                videoInfo.size = readVideoSampleSize;
-                videoInfo.flags = videoExtractor.getSampleFlags();
-                videoInfo.offset = 0;
-                videoInfo.presentationTimeUs += sampleTime;
-
-                mediaMuxer.writeSampleData(writeVideoTrackIndex, byteBuffer, videoInfo);
-                videoExtractor.advance();
-            }
-
-            while (true) {
-                int readAudioSampleSize = audioExtractor.readSampleData(byteBuffer, 0);
-                if (readAudioSampleSize < 0) {
-                    break;
-                }
-
-                audioInfo.size = readAudioSampleSize;
-                audioInfo.offset = 0;
-                audioInfo.flags = audioExtractor.getSampleFlags();
-                audioInfo.presentationTimeUs += sampleTime;
-
-                mediaMuxer.writeSampleData(writeAudioTrackIndex, byteBuffer, audioInfo);
-                audioExtractor.advance();
             }
 
             mediaMuxer.stop();
             mediaMuxer.release();
-            videoExtractor.release();
-            audioExtractor.release();
-
-            Toast.makeText(this, getString(R.string.muter_finish), Toast.LENGTH_LONG).show();
-            Log.i(TAG, getString(R.string.muter_finish));
+            for (int i = 0; i < length; i++) {
+                extractors[i].release();
+            }
+            Log.d(TAG, "out: " + outPath);
+            return true;
         } catch (IOException e) {
             e.printStackTrace();
-            Toast.makeText(this, getString(R.string.muter_fail), Toast.LENGTH_LONG).show();
-            Log.e(TAG, getString(R.string.muter_fail) + e.toString());
         }
+        return false;
+    }
+
+    private static String getMediaPrefix(String path1, String path2) {
+        return (path1.endsWith(SUFFIX_AUDIO) || path2.endsWith(SUFFIX_AUDIO)) ? PREFIX_AUDIO : PREFIX_VIDEO;
+    }
+
+    private static int getTrackIndex(MediaExtractor extractor, String prefix) {
+        int count = extractor.getTrackCount();
+        for (int i = 0; i < count; i++) {
+            if (extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME).startsWith(prefix)) {
+                return i;
+            }
+        }
+        return INVALID_INDEX;
+    }
+
+    private static long getSmapleTime(MediaExtractor extractor, ByteBuffer byteBuffer) {
+        long smapleTime = 0;
+        //将样本数据存储到字节缓存区
+        extractor.readSampleData(byteBuffer, 0);
+        //skip first I frame
+        if (extractor.getSampleFlags() == MediaExtractor.SAMPLE_FLAG_SYNC) {
+            //读取下一帧数据
+            extractor.advance();
+        }
+
+        extractor.readSampleData(byteBuffer, 0);
+        long secondTime = extractor.getSampleTime();
+        extractor.advance();
+
+        long thirdTime = extractor.getSampleTime();
+        smapleTime = Math.abs(thirdTime - secondTime);
+        //Log.d(TAG, "getSmapleTime: " + smapleTime);
+        return smapleTime;
+    }
+
+    private void showResult(boolean success, int successId, int failId) {
+        Toast.makeText(this,
+                success ? getString(successId) : getString(failId),
+                Toast.LENGTH_LONG).show();
     }
 
     public void verifyStoragePermissions() {
