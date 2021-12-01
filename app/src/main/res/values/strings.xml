@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">MediaExtractor</string>
+    <string name="extractor_video">分离视频</string>
+    <string name="extractor_audio">分离音频</string>
+    <string name="muter_video_audio">合成音视频</string>
+    <string name="extractor_video_finish">分离视频完成</string>
+    <string name="extractor_video_fail">分离视频失败</string>
+    <string name="extractor_audio_finish">分离音频完成</string>
+    <string name="extractor_audio_fail">分离音频失败</string>
+    <string name="muter_finish">合成音视频完成</string>
+    <string name="muter_fail">合成音视频失败</string>
+</resources>
