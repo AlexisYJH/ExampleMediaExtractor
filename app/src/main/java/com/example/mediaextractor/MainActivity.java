@@ -105,16 +105,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (paths == null || paths.length <= 0) {
             return false;
         }
+
+        int length = paths.length;
+        MediaExtractor[] extractors = new MediaExtractor[length];
+        int[] trackIndexs = new int[length];
+        int[] writeTrackIndexs = new int[length];
+
+        //初始化MediaMuxer
+        MediaMuxer mediaMuxer = null;
         try {
-            //创建MediaMuxer实例，通过new MediaMuxer(String path, int format)指定视频文件输出路径和文件格式
-            MediaMuxer mediaMuxer = new MediaMuxer(outPath,
-                    MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
-
-            int length = paths.length;
-            MediaExtractor[] extractors = new MediaExtractor[length];
-            int[] trackIndexs = new int[length];
-            int[] writeTrackIndexs = new int[length];
-
             for (int i = 0; i < length; i++) {
                 //创建MediaExtractor实例
                 MediaExtractor extractor = new MediaExtractor();
@@ -130,17 +129,31 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     return false;
                 }
                 trackIndexs[i] = trackIndex;
+
                 //切换到想要的轨道
                 extractor.selectTrack(trackIndex);
+
                 //视频轨道格式信息
                 MediaFormat format = extractor.getTrackFormat(trackIndex);
-                //添加媒体通道
+
+                /*MediaMuxer生成音频、视频、把音频与视频混合成一个音视频文件的步骤:
+                1. 创建实例
+                */
+                //创建MediaMuxer实例，通过new MediaMuxer(String path, int format)指定视频文件输出路径和文件格式
+                if (mediaMuxer == null) {
+                    mediaMuxer = new MediaMuxer(outPath,
+                            MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+                }
+
+                //2. 添加媒体通道，将音频轨或视频轨添加到MediaMuxer，返回新的轨道
                 writeTrackIndexs[i] = mediaMuxer.addTrack(format);
             }
 
+            //3. 开始合成
             //添加完所有track后调用start方法，开始音视频合成
             mediaMuxer.start();
 
+            //4. 循环将音频轨或视频轨的数据写到文件
             MediaExtractor extractor;
             ByteBuffer byteBuffer = ByteBuffer.allocate(CAPACITY);
 
@@ -153,7 +166,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                 MediaCodec.BufferInfo bufferInfo = new MediaCodec.BufferInfo();
                 while (true) {
+                    //将样本数据存储到字节缓存区
                     int readVideoSampleSize = extractor.readSampleData(byteBuffer, 0);
+                    //如果没有可获取的样本，退出循环
                     if (readVideoSampleSize < 0) {
                         break;
                     }
@@ -165,10 +180,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
                     //写入数据
                     mediaMuxer.writeSampleData(writeTrackIndexs[i], byteBuffer, bufferInfo);
+                    //读取下一帧数据
                     extractor.advance();
                 }
             }
 
+            //5. 完成后释放资源
             mediaMuxer.stop();
             mediaMuxer.release();
             for (int i = 0; i < length; i++) {
