@@ -78,14 +78,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
      * 分离视频
      */
     private void extractorVideo() {
-        showResult(extractor(OUTPUT_VIDEO_PATH), R.string.extractor_video_finish, R.string.extractor_video_finish);
+        showResult(extractor(OUTPUT_VIDEO_PATH), R.string.extractor_video_finish, R.string.extractor_video_fail);
     }
 
     /**
      * 分离音频
      */
     private void extractorAudio() {
-        showResult(extractor(OUTPUT_AUDIO_PATH), R.string.extractor_audio_finish, R.string.extractor_audio_finish);
+        showResult(extractor(OUTPUT_AUDIO_PATH), R.string.extractor_audio_finish, R.string.extractor_audio_fail);
     }
 
     /**
